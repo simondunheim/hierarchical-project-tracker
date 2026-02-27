@@ -1,0 +1,62 @@
+:root {
+  --bg:         #FAFAF0;
+  --bg2:        #FFFFFF;
+  --bg3:        #FFF9D0;
+  --bg4:        #EDEDDE;
+  --black:      #111111;
+  --white:      #FFFFFF;
+  --yellow:     #FFE500;
+  --yellow-hi:  #FFED4A;
+  --blue:       #2B5FFF;
+  --blue-dim:   #D6E4FF;
+  --red:        #FF2200;
+  --red-dim:    #FFE0DD;
+  --green:      #00BB44;
+  --green-dim:  #CCFFE0;
+  --orange:     #FF8C00;
+  --orange-dim: #FFE5CC;
+  --font:       'Courier New', Consolas, 'Lucida Console', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--black);
+  min-height: 100vh;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--font);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+input, textarea, select {
+  font-family: var(--font);
+  font-size: inherit;
+  line-height: inherit;
+  background: var(--bg2);
+  color: var(--black);
+  border: 2px solid var(--black);
+  border-radius: 0;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 3px 3px 0 var(--black);
+}
+
+/* Hide scrollbars */
+* { scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
