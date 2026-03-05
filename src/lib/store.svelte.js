@@ -1,3 +1,5 @@
+import { supabase } from './supabase.js'
+
 const V1_KEY = 'tracker-post-v1'
 const V2_KEY = 'tracker-post-v2'
 
@@ -111,9 +113,58 @@ function persist(data) {
 // --- Reactive state ---
 
 let _data = $state(loadV2() ?? migrateFromV1() ?? defaultData())
+let _user = $state(null)
+let _loading = $state(true)
+
+// --- Supabase sync ---
+
+let _saveTimer = null
+
+function saveToSupabase() {
+  if (!_user) return
+  clearTimeout(_saveTimer)
+  _saveTimer = setTimeout(async () => {
+    const snapshot = $state.snapshot(_data)
+    await supabase.from('user_data').upsert({
+      user_id: _user.id,
+      data: snapshot,
+      updated_at: new Date().toISOString()
+    })
+  }, 800)
+}
+
+async function loadFromSupabase() {
+  if (!_user) return
+  const { data: row } = await supabase
+    .from('user_data')
+    .select('data')
+    .eq('user_id', _user.id)
+    .single()
+  if (row?.data) {
+    _data = row.data
+  } else {
+    _data = loadV2() ?? migrateFromV1() ?? defaultData()
+  }
+}
+
+// Auth state listener — fires on page load (INITIAL_SESSION) and on login/logout
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+    _user = session?.user ?? null
+    if (_user) {
+      await loadFromSupabase()
+    }
+    _loading = false
+  } else if (event === 'SIGNED_OUT') {
+    _user = null
+    _data = defaultData()
+    _loading = false
+  }
+})
 
 function save() {
   persist($state.snapshot(_data))
+  saveToSupabase()
 }
 
 function currentProject() {
@@ -125,6 +176,24 @@ function items() {
 }
 
 export const store = {
+  // --- Auth ---
+  get user() { return _user },
+  get loading() { return _loading },
+
+  async login(email, password) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+  },
+
+  async signup(email, password) {
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
+  },
+
+  async logout() {
+    await supabase.auth.signOut()
+  },
+
   // --- Reads ---
   get projects() { return _data.projects },
   get currentProjectId() { return _data.currentId },

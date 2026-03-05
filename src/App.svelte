@@ -3,6 +3,7 @@
   import TreeNode from './lib/TreeNode.svelte'
   import Sidebar from './lib/Sidebar.svelte'
   import GlobalBugList from './lib/GlobalBugList.svelte'
+  import Auth from './lib/Auth.svelte'
 
   let bugPanelOpen = $state(false)
   let totalBugs = $derived(store.allBugs.length)
@@ -21,6 +22,11 @@
   }
 </script>
 
+{#if store.loading}
+  <div class="init">// LOADING...</div>
+{:else if !store.user}
+  <Auth />
+{:else}
 <div class="shell">
   <header>
     <div class="header-inner">
@@ -42,6 +48,7 @@
             <span class="bug-count-badge">{totalBugs}</span>
           {/if}
         </button>
+        <button class="btn" onclick={() => store.logout()}>LOG OUT</button>
       </div>
     </div>
   </header>
@@ -72,8 +79,20 @@
     </div>
   </div>
 </div>
+{/if}
 
 <style>
+  .init {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #888;
+  }
+
   .shell {
     display: flex;
     flex-direction: column;
