@@ -115,6 +115,9 @@ function persist(data) {
 let _data = $state(loadV2() ?? migrateFromV1() ?? defaultData())
 let _user = $state(null)
 let _loading = $state(true)
+let _sharedProjects = $state([])  // [{ id, name, owner_id, role, items }]
+let _realtimeChannels = []
+let _sharedSaveTimers = {}
 
 // --- Supabase sync ---
 
@@ -147,16 +150,82 @@ async function loadFromSupabase() {
   }
 }
 
+// --- Shared project helpers ---
+
+function isShared(id) {
+  return _sharedProjects.some(p => p.id === id)
+}
+
+function saveCurrentProject() {
+  if (isShared(_data.currentId)) saveSharedProject(_data.currentId)
+  else save()
+}
+
+async function saveSharedProject(projectId) {
+  if (!_user) return
+  clearTimeout(_sharedSaveTimers[projectId])
+  _sharedSaveTimers[projectId] = setTimeout(async () => {
+    const sp = _sharedProjects.find(p => p.id === projectId)
+    if (!sp) return
+    await supabase.from('shared_project_data')
+      .update({ items: $state.snapshot(sp.items), updated_at: new Date().toISOString() })
+      .eq('project_id', projectId)
+  }, 800)
+}
+
+async function loadSharedProjects() {
+  if (!_user) return
+  const { data: memberships, error } = await supabase
+    .from('shared_project_members')
+    .select(`role, project:shared_projects(id, name, owner_id, data:shared_project_data(items))`)
+    .eq('user_id', _user.id)
+  if (error) { console.warn('[loadSharedProjects]', error.message); return }
+  if (!memberships) return
+  _sharedProjects = memberships.map(m => ({
+    id: m.project.id, name: m.project.name,
+    owner_id: m.project.owner_id, role: m.role,
+    items: m.project.data?.items ?? []
+  }))
+}
+
+function subscribeToSharedProjects() {
+  for (const ch of _realtimeChannels) supabase.removeChannel(ch)
+  _realtimeChannels = []
+  for (const sp of _sharedProjects) {
+    const channel = supabase.channel(`spd:${sp.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public',
+        table: 'shared_project_data',
+        filter: `project_id=eq.${sp.id}`
+      }, (payload) => {
+        const idx = _sharedProjects.findIndex(p => p.id === sp.id)
+        if (idx !== -1) _sharedProjects[idx] = { ..._sharedProjects[idx], items: payload.new.items }
+      })
+      .subscribe()
+    _realtimeChannels.push(channel)
+  }
+}
+
 // Auth state listener — fires on page load (INITIAL_SESSION) and on login/logout
 supabase.auth.onAuthStateChange(async (event, session) => {
+  console.log('[auth]', event, session?.user?.email ?? 'no user')
   if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
     _user = session?.user ?? null
-    if (_user) {
-      await loadFromSupabase()
-    }
     _loading = false
+    if (_user) {
+      supabase.rpc('accept_project_invite', { p_email: _user.email })
+        .then(r => { if (r.error) console.warn('[rpc]', r.error.message) })
+        .catch(e => console.warn('[rpc] failed:', e))
+      loadFromSupabase()
+        .then(() => loadSharedProjects())
+        .then(() => subscribeToSharedProjects())
+        .catch(e => console.error('[auth] load error:', e))
+    }
   } else if (event === 'SIGNED_OUT') {
+    for (const ch of _realtimeChannels) supabase.removeChannel(ch)
+    _realtimeChannels = []
     _user = null
+    _sharedProjects = []
     _data = defaultData()
     _loading = false
   }
@@ -168,7 +237,9 @@ function save() {
 }
 
 function currentProject() {
-  return _data.projects.find(p => p.id === _data.currentId) ?? _data.projects[0]
+  return _data.projects.find(p => p.id === _data.currentId)
+    ?? _sharedProjects.find(p => p.id === _data.currentId)
+    ?? _data.projects[0]
 }
 
 function items() {
@@ -195,8 +266,14 @@ export const store = {
   },
 
   // --- Reads ---
-  get projects() { return _data.projects },
+  get projects() {
+    return [
+      ..._data.projects,
+      ..._sharedProjects.map(sp => ({ ...sp, _shared: true, _role: sp.role }))
+    ]
+  },
   get currentProjectId() { return _data.currentId },
+  get currentProjectIsShared() { return isShared(_data.currentId) },
 
   // --- Project ops ---
   addProject() {
@@ -207,26 +284,114 @@ export const store = {
   },
 
   deleteProject(id) {
-    if (_data.projects.length <= 1) return
+    if (isShared(id)) {
+      const sp = _sharedProjects.find(p => p.id === id)
+      if (!sp) return
+      if (sp.role === 'owner') {
+        supabase.from('shared_projects').delete().eq('id', id).then(() => {})
+      } else {
+        supabase.from('shared_project_members')
+          .delete()
+          .eq('project_id', id)
+          .eq('user_id', _user.id)
+          .then(() => {})
+      }
+      const idx = _sharedProjects.findIndex(p => p.id === id)
+      if (idx !== -1) _sharedProjects.splice(idx, 1)
+      // Remove realtime channel for this project
+      const chIdx = _realtimeChannels.findIndex(ch => ch.topic === `realtime:spd:${id}`)
+      if (chIdx !== -1) {
+        supabase.removeChannel(_realtimeChannels[chIdx])
+        _realtimeChannels.splice(chIdx, 1)
+      }
+      if (_data.currentId === id) {
+        _data.currentId = _data.projects[0]?.id ?? (_sharedProjects[0]?.id ?? null)
+      }
+      return
+    }
+    if (_data.projects.length <= 1 && _sharedProjects.length === 0) return
+    if (_data.projects.length <= 1) {
+      // Can still delete if there are shared projects to fall back to
+    }
     const idx = _data.projects.findIndex(p => p.id === id)
     if (idx === -1) return
     _data.projects.splice(idx, 1)
     if (_data.currentId === id) {
-      _data.currentId = _data.projects[Math.max(0, idx - 1)].id
+      if (_data.projects.length > 0) {
+        _data.currentId = _data.projects[Math.max(0, idx - 1)].id
+      } else if (_sharedProjects.length > 0) {
+        _data.currentId = _sharedProjects[0].id
+      }
     }
     save()
   },
 
   renameProject(id, name) {
+    if (isShared(id)) {
+      const sp = _sharedProjects.find(p => p.id === id)
+      if (!sp || sp.role !== 'owner') return
+      sp.name = name
+      supabase.from('shared_projects').update({ name }).eq('id', id).then(() => {})
+      return
+    }
     const p = _data.projects.find(p => p.id === id)
     if (p) { p.name = name; save() }
   },
 
   switchProject(id) {
-    if (_data.projects.some(p => p.id === id)) {
+    if (_data.projects.some(p => p.id === id) || isShared(id)) {
       _data.currentId = id
-      save()
+      persist($state.snapshot(_data))
     }
+  },
+
+  // --- Shared project ops ---
+  async createSharedProject() {
+    if (!_user) return
+    const { data: sp, error } = await supabase
+      .from('shared_projects')
+      .insert({ owner_id: _user.id, name: 'Shared Project' })
+      .select()
+      .single()
+    if (error || !sp) return
+    await supabase.from('shared_project_members').insert({ project_id: sp.id, user_id: _user.id, role: 'owner' })
+    await supabase.from('shared_project_data').insert({ project_id: sp.id, items: [] })
+    const newSp = { id: sp.id, name: sp.name, owner_id: sp.owner_id, role: 'owner', items: [] }
+    _sharedProjects.push(newSp)
+    _data.currentId = sp.id
+    persist($state.snapshot(_data))
+    // Subscribe realtime for new project
+    const channel = supabase.channel(`spd:${sp.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public',
+        table: 'shared_project_data',
+        filter: `project_id=eq.${sp.id}`
+      }, (payload) => {
+        const idx = _sharedProjects.findIndex(p => p.id === sp.id)
+        if (idx !== -1) _sharedProjects[idx] = { ..._sharedProjects[idx], items: payload.new.items }
+      })
+      .subscribe()
+    _realtimeChannels.push(channel)
+  },
+
+  async sendInvite(projectId, email) {
+    if (!_user) return
+    const { error } = await supabase.from('project_invites').insert({
+      project_id: projectId,
+      invited_by: _user.id,
+      email
+    })
+    if (error) throw error
+  },
+
+  async loadInvitesForProject(projectId) {
+    const { data, error } = await supabase
+      .from('project_invites')
+      .select('id, email, status, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return data ?? []
   },
 
   // --- Item reads ---
@@ -235,7 +400,7 @@ export const store = {
   // --- Item ops (operate on current project) ---
   addRoot() {
     items().push(newItem())
-    save()
+    saveCurrentProject()
   },
 
   addChild(parentId) {
@@ -243,12 +408,12 @@ export const store = {
     if (!p) return
     p.children.push(newItem())
     p.expanded = true
-    save()
+    saveCurrentProject()
   },
 
   updateTitle(id, title) {
     const item = find(items(), id)
-    if (item) { item.title = title; save() }
+    if (item) { item.title = title; saveCurrentProject() }
   },
 
   updateProgress(id, val) {
@@ -260,7 +425,7 @@ export const store = {
     else if (clamped === 0) item.status = 'todo'
     else item.status = 'in-progress'
     syncParentStatuses(items())
-    save()
+    saveCurrentProject()
   },
 
   cycleStatus(id) {
@@ -268,20 +433,20 @@ export const store = {
     if (!item) return
     const order = ['todo', 'in-progress', 'done', 'blocked']
     item.status = order[(order.indexOf(item.status) + 1) % order.length]
-    save()
+    saveCurrentProject()
   },
 
   toggleExpanded(id) {
     const item = find(items(), id)
-    if (item) { item.expanded = !item.expanded; save() }
+    if (item) { item.expanded = !item.expanded; saveCurrentProject() }
   },
 
-  expandAll()   { setAllExpanded(items(), true);  save() },
-  collapseAll() { setAllExpanded(items(), false); save() },
+  expandAll()   { setAllExpanded(items(), true);  saveCurrentProject() },
+  collapseAll() { setAllExpanded(items(), false); saveCurrentProject() },
 
   delete(id) {
     const loc = findLocation(items(), id)
-    if (loc) { loc.list.splice(loc.idx, 1); save() }
+    if (loc) { loc.list.splice(loc.idx, 1); saveCurrentProject() }
   },
 
   addParent(itemId) {
@@ -292,7 +457,7 @@ export const store = {
     wrapper.children = [original]
     wrapper.expanded = true
     loc.list.splice(loc.idx, 1, wrapper)
-    save()
+    saveCurrentProject()
   },
 
   // --- Notes & bugs ---
@@ -300,12 +465,12 @@ export const store = {
     const item = find(items(), id)
     if (!item) return
     item.detailOpen = !(item.detailOpen ?? false)
-    save()
+    saveCurrentProject()
   },
 
   updateNotes(id, notes) {
     const item = find(items(), id)
-    if (item) { item.notes = notes; save() }
+    if (item) { item.notes = notes; saveCurrentProject() }
   },
 
   get allBugs() { return collectAllBugs(items()) },
@@ -315,26 +480,26 @@ export const store = {
     if (!item) return
     if (!item.bugs) item.bugs = []
     item.bugs.push({ id: genId(), name, status: 'open', errorCode: '' })
-    save()
+    saveCurrentProject()
   },
 
   updateBugErrorCode(itemId, bugId, code) {
     const item = find(items(), itemId)
     const bug = item?.bugs?.find(b => b.id === bugId)
-    if (bug) { bug.errorCode = code; save() }
+    if (bug) { bug.errorCode = code; saveCurrentProject() }
   },
 
   deleteBug(itemId, bugId) {
     const item = find(items(), itemId)
     if (!item?.bugs) return
     const idx = item.bugs.findIndex(b => b.id === bugId)
-    if (idx !== -1) { item.bugs.splice(idx, 1); save() }
+    if (idx !== -1) { item.bugs.splice(idx, 1); saveCurrentProject() }
   },
 
   renameBug(itemId, bugId, name) {
     const item = find(items(), itemId)
     const bug = item?.bugs?.find(b => b.id === bugId)
-    if (bug) { bug.name = name; save() }
+    if (bug) { bug.name = name; saveCurrentProject() }
   },
 
   cycleBugStatus(itemId, bugId) {
@@ -343,7 +508,7 @@ export const store = {
     if (!bug) return
     const order = ['open', 'fixed', 'wont-fix']
     bug.status = order[(order.indexOf(bug.status) + 1) % order.length]
-    save()
+    saveCurrentProject()
   },
 
   // --- Import / Export ---
@@ -372,7 +537,7 @@ export const store = {
         }))
       }
       currentProject().items = regenIds(parsed)
-      save()
+      saveCurrentProject()
       return true
     } catch { return false }
   },
@@ -400,6 +565,6 @@ export const store = {
       const idx = position === 'before' ? targetLoc.idx : targetLoc.idx + 1
       targetLoc.list.splice(idx, 0, draggedItem)
     }
-    save()
+    saveCurrentProject()
   }
 }

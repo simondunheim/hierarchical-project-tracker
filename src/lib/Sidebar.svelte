@@ -1,8 +1,10 @@
 <script>
   import { store, projectProgress } from './store.svelte.js'
+  import SharePanel from './SharePanel.svelte'
 
   let renamingId = $state(null)
   let renameVal = $state('')
+  let shareOpenId = $state(null)
 
   function startRename(p) {
     renamingId = p.id
@@ -21,10 +23,20 @@
   }
 
   function tryDelete(p) {
-    if (store.projects.length <= 1) return
-    if (confirm(`Delete project "${p.name}"? This cannot be undone.`)) {
+    const isSharedEditor = p._shared && p._role !== 'owner'
+    const personalCount = store.projects.filter(x => !x._shared).length
+    if (!p._shared && personalCount <= 1 && store.projects.filter(x => x._shared).length === 0) return
+    const label = isSharedEditor ? 'Leave' : 'Delete'
+    const msg = isSharedEditor
+      ? `Leave shared project "${p.name}"?`
+      : `Delete project "${p.name}"? This cannot be undone.`
+    if (confirm(msg)) {
       store.deleteProject(p.id)
     }
+  }
+
+  function canShare(p) {
+    return p._shared && p._role === 'owner'
   }
 </script>
 
@@ -61,23 +73,39 @@
               title="Double-click to rename"
             >{p.name}</span>
           {/if}
+          {#if p._shared}
+            <span class="shared-tag">[SHR]</span>
+          {/if}
           <span class="project-pct">{pct}%</span>
         </div>
 
-        {#if store.projects.length > 1}
+        {#if canShare(p)}
           <button
-            class="delete-btn"
-            onclick={e => { e.stopPropagation(); tryDelete(p) }}
-            title="Delete project"
-          >×</button>
+            class="share-btn"
+            onclick={e => { e.stopPropagation(); shareOpenId = shareOpenId === p.id ? null : p.id }}
+            title="Share project"
+          >~</button>
         {/if}
+
+        <button
+          class="delete-btn"
+          onclick={e => { e.stopPropagation(); tryDelete(p) }}
+          title={p._shared && p._role !== 'owner' ? 'Leave project' : 'Delete project'}
+        >×</button>
       </div>
+
+      {#if shareOpenId === p.id}
+        <SharePanel projectId={p.id} onclose={() => shareOpenId = null} />
+      {/if}
     {/each}
   </div>
 
   <div class="sidebar-footer">
     <button class="new-project-btn" onclick={() => store.addProject()}>
       + NEW PROJECT
+    </button>
+    <button class="new-project-btn shared-btn" onclick={() => store.createSharedProject()}>
+      + SHARED
     </button>
   </div>
 </aside>
@@ -140,7 +168,7 @@
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 0.35rem;
+    gap: 0.3rem;
     overflow: hidden;
   }
 
@@ -156,6 +184,14 @@
 
   .project-item.active .project-name {
     font-weight: 700;
+  }
+
+  .shared-tag {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #2255cc;
   }
 
   .project-pct {
@@ -174,6 +210,23 @@
     padding: 0.1rem 0.3rem;
     box-shadow: 2px 2px 0 var(--black);
   }
+
+  .share-btn {
+    flex-shrink: 0;
+    width: 1.2rem;
+    height: 1.2rem;
+    font-size: 0.9rem;
+    line-height: 1;
+    color: #4488ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    border: 1px solid transparent;
+    transition: opacity 0.1s, background 0.1s, border-color 0.1s;
+  }
+  .project-item:hover .share-btn { opacity: 1; }
+  .share-btn:hover { background: #e8f0ff; border-color: #4488ff; }
 
   .delete-btn {
     flex-shrink: 0;
@@ -195,6 +248,9 @@
   .sidebar-footer {
     padding: 0.5rem 0.6rem;
     border-top: 2px solid var(--black);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 
   .new-project-btn {
@@ -219,5 +275,17 @@
   .new-project-btn:active {
     transform: translate(1px, 1px);
     box-shadow: 1px 1px 0 var(--black);
+  }
+
+  .shared-btn {
+    background: #e8f0ff;
+    color: #2255cc;
+    border-color: #4488ff;
+    box-shadow: 2px 2px 0 #4488ff;
+  }
+  .shared-btn:hover {
+    background: #4488ff;
+    color: #fff;
+    box-shadow: 3px 3px 0 #2255cc;
   }
 </style>
