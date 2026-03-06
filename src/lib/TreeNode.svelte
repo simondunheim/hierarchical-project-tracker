@@ -179,8 +179,16 @@
         >{item.title}</span>
       {/if}
 
-      {#if hasContent && !detailOpen}
-        <span class="content-dot" title="Has notes or bugs"></span>
+      {#if hasContent}
+        <span
+          class="content-dot"
+          class:detail-open={detailOpen}
+          title={detailOpen ? 'Close notes & bugs' : 'Open notes & bugs'}
+          onclick={() => store.toggleDetail(item.id)}
+          role="button"
+          tabindex="0"
+          onkeydown={e => e.key === 'Enter' && store.toggleDetail(item.id)}
+        ></span>
       {/if}
     </div>
 
@@ -456,7 +464,11 @@
     height: 6px;
     background: var(--blue);
     border: 1px solid var(--black);
+    cursor: pointer;
+    transition: background 0.1s;
   }
+  .content-dot:hover { background: var(--black); }
+  .content-dot.detail-open { background: var(--black); }
 
   /* Progress area */
   .progress-area {

@@ -536,7 +536,9 @@ export const store = {
           bugs: (item.bugs ?? []).map(b => ({ ...b, id: genId() }))
         }))
       }
-      currentProject().items = regenIds(parsed)
+      const newItems = regenIds(parsed)
+      syncParentStatuses(newItems)
+      currentProject().items = newItems
       saveCurrentProject()
       return true
     } catch { return false }
