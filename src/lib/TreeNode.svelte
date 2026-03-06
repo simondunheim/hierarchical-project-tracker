@@ -111,6 +111,11 @@
   // === Derived ===
   let progress       = $derived(computeProgress(item))
   let hasChildren    = $derived(item.children.length > 0)
+  let sortedChildren = $derived([...item.children].sort((a, b) => {
+    const aLeaf = a.children.length === 0
+    const bLeaf = b.children.length === 0
+    return aLeaf === bLeaf ? 0 : aLeaf ? -1 : 1
+  }))
   let bugs           = $derived(item.bugs ?? [])
   let notes          = $derived(item.notes ?? '')
   let detailOpen     = $derived(item.detailOpen ?? false)
@@ -348,7 +353,7 @@
   <!-- Children -->
   {#if item.expanded && hasChildren}
     <div class="children">
-      {#each item.children as child (child.id)}
+      {#each sortedChildren as child (child.id)}
         <TreeNode item={child} depth={depth + 1} />
       {/each}
     </div>
