@@ -406,7 +406,7 @@ export const store = {
   addChild(parentId) {
     const p = find(items(), parentId)
     if (!p) return
-    p.children.push(newItem())
+    p.children.unshift(newItem())
     p.expanded = true
     saveCurrentProject()
   },
