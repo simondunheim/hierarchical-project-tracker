@@ -109,8 +109,17 @@
   const BUG_STATUS_LABEL = { 'open': 'OPEN', 'fixed': 'FIXED', 'wont-fix': "WON'T FIX" }
 
   // === Derived ===
+  function hasBlockedDescendant(children) {
+    for (const child of children) {
+      if (child.status === 'blocked') return true
+      if (hasBlockedDescendant(child.children)) return true
+    }
+    return false
+  }
+
   let progress       = $derived(computeProgress(item))
   let hasChildren    = $derived(item.children.length > 0)
+  let blockedBelow   = $derived(hasChildren && hasBlockedDescendant(item.children))
   let sortedChildren = $derived([...item.children].sort((a, b) => {
     const aLeaf = a.children.length === 0
     const bLeaf = b.children.length === 0
@@ -182,6 +191,10 @@
           ondblclick={startEdit}
           title="Double-click to edit"
         >{item.title}</span>
+      {/if}
+
+      {#if blockedBelow}
+        <span class="blocked-warn" title="A child item is blocked">!</span>
       {/if}
 
       {#if hasContent}
@@ -460,6 +473,15 @@
     color: var(--black);
     padding: 0.15rem 0.4rem;
     box-shadow: 2px 2px 0 var(--black);
+  }
+
+  /* Blocked descendant warning */
+  .blocked-warn {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 900;
+    color: var(--red);
+    line-height: 1;
   }
 
   /* Content dot */
