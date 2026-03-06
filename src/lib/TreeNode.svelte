@@ -427,7 +427,7 @@
     transition: color 0.1s;
   }
   .toggle:hover { color: var(--black); }
-  .toggle.hidden { display: none; }
+  .toggle.hidden { visibility: hidden; }
   .arrow { transition: transform 0.15s ease; }
   .arrow.open { transform: rotate(90deg); }
 
