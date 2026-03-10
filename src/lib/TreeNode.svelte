@@ -11,6 +11,7 @@
   let { item, depth = 0 } = $props()
 
   let menuOpen = $state(false)
+  let titleExpanded = $state(false)
 
   // === Title editing ===
   let editing = $state(false)
@@ -190,6 +191,8 @@
       {:else}
         <span
           class="title"
+          class:expanded={titleExpanded}
+          onclick={() => titleExpanded = !titleExpanded}
           ondblclick={startEdit}
           title="Double-click to edit"
         >{item.title}</span>
@@ -497,6 +500,12 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .title.expanded {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
   }
   .title-input {
     font-size: 0.85rem;
