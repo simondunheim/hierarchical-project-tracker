@@ -10,6 +10,8 @@
 
   let { item, depth = 0 } = $props()
 
+  let menuOpen = $state(false)
+
   // === Title editing ===
   let editing = $state(false)
   let editVal = $state('')
@@ -246,7 +248,7 @@
       title="Click to cycle status"
     >[{STATUS_LABEL[item.status]}]</button>
 
-    <!-- Row actions (visible on hover) -->
+    <!-- Row actions (visible on hover, desktop) -->
     <div class="actions">
       <button class="act" onclick={() => store.addChild(item.id)} title="Add child item">
         <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -278,6 +280,37 @@
           <line x1="2" y1="2" x2="12" y2="12"/><line x1="12" y1="2" x2="2" y2="12"/>
         </svg>
       </button>
+    </div>
+
+    <!-- Mobile: single tap-to-open action menu -->
+    <div class="mobile-menu-wrap">
+      <button
+        class="mobile-menu-btn"
+        onclick={e => { e.stopPropagation(); menuOpen = !menuOpen }}
+        aria-label="Item actions"
+      >...</button>
+
+      {#if menuOpen}
+        <div class="menu-overlay" onclick={() => menuOpen = false} role="presentation"></div>
+        <div class="menu-dropdown">
+          <button class="menu-item" onclick={() => { store.addChild(item.id); menuOpen = false }}>
+            + Add child
+          </button>
+          <button class="menu-item" onclick={() => { store.addParent(item.id); menuOpen = false }}>
+            Wrap in parent
+          </button>
+          <button
+            class="menu-item"
+            class:menu-item-active={detailOpen}
+            onclick={() => { store.toggleDetail(item.id); menuOpen = false }}
+          >
+            {detailOpen ? 'Close notes' : 'Notes & bugs'}
+          </button>
+          <button class="menu-item menu-item-danger" onclick={() => { store.delete(item.id); menuOpen = false }}>
+            Delete
+          </button>
+        </div>
+      {/if}
     </div>
 
   </div>
@@ -742,6 +775,73 @@
   .bug-add-btn:hover { background: var(--yellow); transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--black); }
   .bug-add-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--black); }
 
+  /* Mobile menu (hidden on desktop) */
+  .mobile-menu-wrap {
+    display: none;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .mobile-menu-btn {
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #888;
+    border: 1.5px solid #ccc;
+    background: var(--bg2);
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+  }
+  .mobile-menu-btn:hover,
+  .mobile-menu-btn:active {
+    color: var(--black);
+    background: var(--yellow);
+    border-color: var(--black);
+  }
+
+  .menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+  }
+
+  .menu-dropdown {
+    position: absolute;
+    top: 0;
+    right: 2.2rem;
+    z-index: 51;
+    background: var(--bg2);
+    border: 2px solid var(--black);
+    box-shadow: 4px 4px 0 var(--black);
+    display: flex;
+    flex-direction: column;
+    min-width: 10rem;
+  }
+
+  .menu-item {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--black);
+    text-align: left;
+    border-bottom: 1px solid #E0E0D0;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.08s;
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item:hover { background: var(--bg3); }
+  .menu-item-active { background: var(--yellow); }
+  .menu-item-active:hover { background: var(--yellow-hi); }
+  .menu-item-danger { color: var(--red); }
+  .menu-item-danger:hover { background: var(--red-dim); }
+
   /* ===== MOBILE ===== */
   @media (max-width: 700px) {
     /* Smaller row */
@@ -751,20 +851,23 @@
       flex-wrap: nowrap;
     }
 
-    /* Hide drag handle on touch (drag-and-drop not usable on mobile) */
+    /* Hide drag handle on touch */
     .drag-handle { display: none; }
+
+    /* Hide inline actions — replaced by mobile menu */
+    .actions { display: none; }
+
+    /* Show mobile menu button */
+    .mobile-menu-wrap { display: block; }
 
     /* Reduce indent */
     .children { margin-left: 0.8rem; }
 
     /* Shrink progress area */
     .progress-area {
-      width: 7rem;
-      max-width: 7rem;
+      width: 6rem;
+      max-width: 6rem;
     }
-
-    /* Always show actions on touch (no hover) */
-    .actions { opacity: 1; }
 
     /* Always show slider controls on touch (no hover) */
     .row .leaf-default { display: none; }
@@ -780,20 +883,15 @@
     /* Detail panel: stack vertically */
     .detail-panel { flex-direction: column; }
     .detail-bugs { width: auto; }
-
-    /* Smaller action buttons */
-    .act { width: 1.6rem; height: 1.6rem; }
   }
 
   @media (max-width: 420px) {
-    /* On very small screens, hide parent progress bar, show only % */
     .bar-outer { display: none; }
     .progress-area { width: 3rem; }
   }
 
-  /* Touch devices: always-visible buttons in sidebar items */
+  /* Touch devices: always show slider controls */
   @media (hover: none) {
-    .actions { opacity: 1; }
     .row .leaf-default { display: none; }
     .row .slider-controls { display: flex; }
   }
