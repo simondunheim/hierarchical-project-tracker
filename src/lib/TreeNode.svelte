@@ -504,6 +504,7 @@
     gap: 0.4rem;
     flex-shrink: 0;
     width: 15rem;
+    max-width: 40vw;
   }
 
   /* Parent bar */
@@ -740,4 +741,60 @@
   }
   .bug-add-btn:hover { background: var(--yellow); transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--black); }
   .bug-add-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--black); }
+
+  /* ===== MOBILE ===== */
+  @media (max-width: 700px) {
+    /* Smaller row */
+    .row {
+      padding: 0.45rem 0.5rem 0.45rem 0.35rem;
+      gap: 0.3rem;
+      flex-wrap: nowrap;
+    }
+
+    /* Hide drag handle on touch (drag-and-drop not usable on mobile) */
+    .drag-handle { display: none; }
+
+    /* Reduce indent */
+    .children { margin-left: 0.8rem; }
+
+    /* Shrink progress area */
+    .progress-area {
+      width: 7rem;
+      max-width: 7rem;
+    }
+
+    /* Always show actions on touch (no hover) */
+    .actions { opacity: 1; }
+
+    /* Always show slider controls on touch (no hover) */
+    .row .leaf-default { display: none; }
+    .row .slider-controls { display: flex; }
+
+    /* Shrink badge */
+    .badge {
+      min-width: 0;
+      padding: 0.12rem 0.3rem;
+      font-size: 0.6rem;
+    }
+
+    /* Detail panel: stack vertically */
+    .detail-panel { flex-direction: column; }
+    .detail-bugs { width: auto; }
+
+    /* Smaller action buttons */
+    .act { width: 1.6rem; height: 1.6rem; }
+  }
+
+  @media (max-width: 420px) {
+    /* On very small screens, hide parent progress bar, show only % */
+    .bar-outer { display: none; }
+    .progress-area { width: 3rem; }
+  }
+
+  /* Touch devices: always-visible buttons in sidebar items */
+  @media (hover: none) {
+    .actions { opacity: 1; }
+    .row .leaf-default { display: none; }
+    .row .slider-controls { display: flex; }
+  }
 </style>

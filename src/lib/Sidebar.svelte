@@ -2,6 +2,8 @@
   import { store, projectProgress } from './store.svelte.js'
   import SharePanel from './SharePanel.svelte'
 
+  let { onclose } = $props()
+
   let renamingId = $state(null)
   let renameVal = $state('')
   let shareOpenId = $state(null)
@@ -41,7 +43,10 @@
 </script>
 
 <aside class="sidebar">
-  <div class="sidebar-label">// PROJECTS</div>
+  <div class="sidebar-label">
+    // PROJECTS
+    <button class="sidebar-close" onclick={onclose} aria-label="Close sidebar">x</button>
+  </div>
 
   <div class="project-list">
     {#each store.projects as p (p.id)}
@@ -129,6 +134,28 @@
     padding: 0.6rem 0.75rem 0.4rem;
     border-bottom: 2px solid var(--black);
     background: var(--yellow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sidebar-close {
+    display: none;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--black);
+    padding: 0.1rem 0.35rem;
+    border: 2px solid var(--black);
+    background: var(--white);
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--black);
+    line-height: 1.4;
+  }
+  .sidebar-close:hover { background: var(--bg3); }
+
+  @media (max-width: 700px) {
+    .sidebar-close { display: block; }
   }
 
   .project-list {
@@ -287,5 +314,11 @@
     background: #4488ff;
     color: #fff;
     box-shadow: 3px 3px 0 #2255cc;
+  }
+
+  /* Touch devices: always show action buttons */
+  @media (hover: none) {
+    .delete-btn { opacity: 1; }
+    .share-btn { opacity: 1; }
   }
 </style>

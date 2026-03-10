@@ -6,6 +6,7 @@
   import Auth from './lib/Auth.svelte'
 
   let bugPanelOpen = $state(false)
+  let sidebarOpen = $state(false)
   let totalBugs = $derived(store.allBugs.length)
 
   let fileInput
@@ -30,11 +31,20 @@
 <div class="shell">
   <header>
     <div class="header-inner">
-      <h1><span class="prompt">&gt;_</span> PROJECT TRACKER</h1>
+      <div class="header-left">
+        <button class="btn hamburger" onclick={() => sidebarOpen = !sidebarOpen} aria-label="Toggle sidebar">
+          <svg viewBox="0 0 14 12" width="14" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="1" y1="1" x2="13" y2="1"/>
+            <line x1="1" y1="6" x2="13" y2="6"/>
+            <line x1="1" y1="11" x2="13" y2="11"/>
+          </svg>
+        </button>
+        <h1><span class="prompt">&gt;_</span> <span class="title-text">PROJECT TRACKER</span></h1>
+      </div>
       <div class="toolbar">
         <button class="btn" onclick={() => store.expandAll()}>EXPAND ALL</button>
-        <button class="btn" onclick={() => store.collapseAll()}>COLLAPSE ALL</button>
-        <button class="btn primary" onclick={() => store.addRoot()}>+ ADD ITEM</button>
+        <button class="btn" onclick={() => store.collapseAll()}>COLLAPSE</button>
+        <button class="btn primary" onclick={() => store.addRoot()}>+ ADD</button>
         <button class="btn" onclick={() => store.exportProject()}>EXPORT</button>
         <button class="btn" onclick={() => fileInput.click()}>IMPORT</button>
         <input bind:this={fileInput} type="file" accept=".json" style="display:none" onchange={handleImport} />
@@ -53,8 +63,14 @@
     </div>
   </header>
 
+  {#if sidebarOpen}
+    <div class="sidebar-overlay" onclick={() => sidebarOpen = false} role="presentation"></div>
+  {/if}
+
   <div class="body">
-    <Sidebar />
+    <div class="sidebar-wrap" class:mobile-open={sidebarOpen}>
+      <Sidebar onclose={() => sidebarOpen = false} />
+    </div>
 
     <main>
       <div class="content">
@@ -75,6 +91,9 @@
     </main>
 
     <div class="bug-panel" class:open={bugPanelOpen}>
+      <div class="bug-panel-header">
+        <button class="bug-panel-close" onclick={() => bugPanelOpen = false}>x CLOSE</button>
+      </div>
       <GlobalBugList />
     </div>
   </div>
@@ -112,6 +131,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
   }
 
   h1 {
@@ -127,10 +153,16 @@
     margin-right: 0.25rem;
   }
 
+  .hamburger {
+    display: none;
+    padding: 0.3rem 0.5rem;
+  }
+
   .toolbar {
     display: flex;
     gap: 0.4rem;
     align-items: center;
+    flex-wrap: wrap;
   }
 
   .btn {
@@ -181,10 +213,19 @@
     border: 1px solid var(--black);
   }
 
+  .sidebar-overlay {
+    display: none;
+  }
+
+  .sidebar-wrap {
+    display: contents;
+  }
+
   .body {
     flex: 1;
     display: flex;
     overflow: hidden;
+    position: relative;
   }
 
   main {
@@ -239,5 +280,100 @@
     width: 320px;
     border-left-width: 3px;
     overflow-y: auto;
+  }
+
+  .bug-panel-header {
+    display: none;
+  }
+  .bug-panel-close {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border: 2px solid var(--black);
+    background: var(--white);
+    box-shadow: 2px 2px 0 var(--black);
+    cursor: pointer;
+  }
+  .bug-panel-close:hover { background: var(--bg3); }
+
+  /* ===== MOBILE / RESPONSIVE ===== */
+  @media (max-width: 700px) {
+    .hamburger {
+      display: flex;
+    }
+
+    .title-text {
+      display: none;
+    }
+
+    .header-inner {
+      padding: 0.5rem 0.75rem;
+      gap: 0.5rem;
+    }
+
+    .toolbar {
+      gap: 0.3rem;
+    }
+
+    .btn {
+      padding: 0.28rem 0.5rem;
+      font-size: 0.7rem;
+    }
+
+    /* Sidebar: fixed drawer */
+    .sidebar-wrap {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+    }
+    .sidebar-wrap.mobile-open {
+      transform: translateX(0);
+    }
+
+    /* Overlay behind sidebar */
+    .sidebar-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 199;
+    }
+
+    /* Bug panel: full-width overlay from right */
+    .bug-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100%;
+      z-index: 200;
+      width: 0;
+      border-left: none;
+      display: flex;
+      flex-direction: column;
+    }
+    .bug-panel.open {
+      width: min(320px, 100vw);
+      border-left-width: 3px;
+      overflow-y: hidden;
+    }
+
+    .bug-panel-header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 2px solid var(--black);
+      background: var(--yellow);
+      flex-shrink: 0;
+    }
+
+    main {
+      padding: 0.75rem;
+    }
   }
 </style>
